@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AutoGuild Dashboard</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        header {
+            background: white;
+            padding: 30px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            margin-bottom: 30px;
+        }
+
+        h1 {
+            color: #333;
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            color: #666;
+            font-size: 1.1em;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .card {
+            background: white;
+            padding: 25px;
+            border-radius: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+
+        .card h2 {
+            color: #667eea;
+            margin-bottom: 20px;
+            font-size: 1.5em;
+        }
+
+        .stat {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 15px 0;
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        .stat:last-child {
+            border-bottom: none;
+        }
+
+        .stat-label {
+            color: #666;
+            font-weight: 500;
+        }
+
+        .stat-value {
+            color: #333;
+            font-weight: bold;
+            font-size: 1.2em;
+        }
+
+        .status-indicator {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+
+        .status-healthy {
+            background: #10b981;
+        }
+
+        .status-warning {
+            background: #f59e0b;
+        }
+
+        .status-error {
+            background: #ef4444;
+        }
+
+        .button {
+            background: #667eea;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1em;
+            font-weight: 600;
+            transition: background 0.3s;
+        }
+
+        .button:hover {
+            background: #5568d3;
+        }
+
+        .button:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+
+        .table {
+            width: 100%;
+            margin-top: 20px;
+        }
+
+        .table th {
+            text-align: left;
+            padding: 12px;
+            background: #f8f9fa;
+            color: #667eea;
+            font-weight: 600;
+        }
+
+        .table td {
+            padding: 12px;
+            border-bottom: 1px solid #f0f0f0;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+
+        .error {
+            background: #fee;
+            color: #c33;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+        }
+
+        #refresh-btn {
+            float: right;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🤖 AutoGuild Dashboard</h1>
+            <p class="subtitle">Universal AI-Powered Community Management Bot</p>
+            <button class="button" id="refresh-btn" onclick="loadAllData()">🔄 Refresh</button>
+        </header>
+
+        <div class="grid">
+            <!-- System Status Card -->
+            <div class="card">
+                <h2>System Status</h2>
+                <div id="status-content" class="loading">Loading...</div>
+            </div>
+
+            <!-- Database Stats Card -->
+            <div class="card">
+                <h2>Database Statistics</h2>
+                <div id="db-stats-content" class="loading">Loading...</div>
+            </div>
+
+            <!-- Metrics Card -->
+            <div class="card">
+                <h2>Performance Metrics</h2>
+                <div id="metrics-content" class="loading">Loading...</div>
+            </div>
+        </div>
+
+        <!-- Leaderboard -->
+        <div class="card">
+            <h2>Top Active Users</h2>
+            <div id="leaderboard-content" class="loading">Loading...</div>
+        </div>
+
+        <!-- Command Stats -->
+        <div class="card" style="margin-top: 20px;">
+            <h2>Command Usage</h2>
+            <div id="commands-content" class="loading">Loading...</div>
+        </div>
+
+        <!-- Quick Actions -->
+        <div class="card" style="margin-top: 20px;">
+            <h2>Quick Actions</h2>
+            <button class="button" onclick="createBackup()">💾 Create Backup</button>
+            <button class="button" style="margin-left: 10px;" onclick="viewBackups()">📁 View Backups</button>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = '';
+
+        async function fetchAPI(endpoint) {
+            try {
+                const response = await fetch(`${API_BASE}${endpoint}`);
+                if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                return await response.json();
+            } catch (error) {
+                console.error('API Error:', error);
+                return null;
+            }
+        }
+
+        async function loadStatus() {
+            const data = await fetchAPI('/api/status');
+            const container = document.getElementById('status-content');
+
+            if (!data) {
+                container.innerHTML = '<div class="error">Failed to load status</div>';
+                return;
+            }
+
+            const uptimeHours = (data.uptime / 3600).toFixed(2);
+            const memoryMB = (data.memory.heapUsed / 1024 / 1024).toFixed(2);
+
+            let platformsHTML = '';
+            data.platforms.forEach(p => {
+                const statusClass = p.ready ? 'status-healthy' : 'status-error';
+                platformsHTML += `<div class="stat">
+                    <span class="stat-label"><span class="status-indicator ${statusClass}"></span>${p.platform}</span>
+                    <span class="stat-value">${p.ready ? 'Ready' : 'Offline'}</span>
+                </div>`;
+            });
+
+            container.innerHTML = `
+                <div class="stat">
+                    <span class="stat-label">Uptime</span>
+                    <span class="stat-value">${uptimeHours}h</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-label">Memory</span>
+                    <span class="stat-value">${memoryMB} MB</span>
+                </div>
+                ${platformsHTML}
+            `;
+        }
+
+        async function loadDatabaseStats() {
+            const data = await fetchAPI('/api/database/stats');
+            const container = document.getElementById('db-stats-content');
+
+            if (!data) {
+                container.innerHTML = '<div class="error">Failed to load database stats</div>';
+                return;
+            }
+
+            container.innerHTML = `
+                <div class="stat">
+                    <span class="stat-label">Users Tracked</span>
+                    <span class="stat-value">${data.user_stats || 0}</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-label">Guilds/Servers</span>
+                    <span class="stat-value">${data.guild_config || 0}</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-label">Mod Actions</span>
+                    <span class="stat-value">${data.moderation_logs || 0}</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-label">Commands Used</span>
+                    <span class="stat-value">${data.command_usage || 0}</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-label">Database Size</span>
+                    <span class="stat-value">${data.fileSizeMB || 'N/A'} MB</span>
+                </div>
+            `;
+        }
+
+        async function loadMetrics() {
+            const data = await fetchAPI('/metrics?format=json');
+            const container = document.getElementById('metrics-content');
+
+            if (!data) {
+                container.innerHTML = '<div class="error">Failed to load metrics</div>';
+                return;
+            }
+
+            const messagesTotal = data.counters['autoguild_messages_total'] || 0;
+            const commandsTotal = data.counters['autoguild_commands_total'] || 0;
+            const errorsTotal = data.counters['autoguild_errors_total'] || 0;
+
+            container.innerHTML = `
+                <div class="stat">
+                    <span class="stat-label">Messages Processed</span>
+                    <span class="stat-value">${messagesTotal}</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-label">Commands Executed</span>
+                    <span class="stat-value">${commandsTotal}</span>
+                </div>
+                <div class="stat">
+                    <span class="stat-label">Errors</span>
+                    <span class="stat-value">${errorsTotal}</span>
+                </div>
+            `;
+        }
+
+        async function loadLeaderboard() {
+            const data = await fetchAPI('/api/leaderboard?limit=10');
+            const container = document.getElementById('leaderboard-content');
+
+            if (!data || !data.leaderboard || data.leaderboard.length === 0) {
+                container.innerHTML = '<p>No data available yet</p>';
+                return;
+            }
+
+            let tableHTML = '<table class="table"><thead><tr><th>Rank</th><th>User ID</th><th>Messages</th><th>Last Active</th></tr></thead><tbody>';
+
+            data.leaderboard.forEach((user, index) => {
+                const lastActive = new Date(user.lastActive).toLocaleDateString();
+                tableHTML += `<tr>
+                    <td><strong>${index + 1}</strong></td>
+                    <td>${user.userId}</td>
+                    <td>${user.messageCount}</td>
+                    <td>${lastActive}</td>
+                </tr>`;
+            });
+
+            tableHTML += '</tbody></table>';
+            container.innerHTML = tableHTML;
+        }
+
+        async function loadCommandStats() {
+            const data = await fetchAPI('/api/commands/stats?limit=10');
+            const container = document.getElementById('commands-content');
+
+            if (!data || !data.commands || data.commands.length === 0) {
+                container.innerHTML = '<p>No command data available yet</p>';
+                return;
+            }
+
+            let tableHTML = '<table class="table"><thead><tr><th>Command</th><th>Usage Count</th></tr></thead><tbody>';
+
+            data.commands.forEach(cmd => {
+                tableHTML += `<tr>
+                    <td><strong>${cmd.commandName}</strong></td>
+                    <td>${cmd.count}</td>
+                </tr>`;
+            });
+
+            tableHTML += '</tbody></table>';
+            container.innerHTML = tableHTML;
+        }
+
+        async function createBackup() {
+            const btn = event.target;
+            btn.disabled = true;
+            btn.textContent = '⏳ Creating backup...';
+
+            const result = await fetchAPI('/api/database/backup', { method: 'POST' });
+
+            if (result && result.success) {
+                alert(`✅ Backup created successfully!\n\nPath: ${result.backupPath}`);
+            } else {
+                alert('❌ Failed to create backup');
+            }
+
+            btn.disabled = false;
+            btn.textContent = '💾 Create Backup';
+        }
+
+        async function viewBackups() {
+            const data = await fetchAPI('/api/database/backups');
+
+            if (data && data.backups && data.backups.length > 0) {
+                alert(`📁 Available Backups (${data.backups.length}):\n\n` + data.backups.slice(0, 10).join('\n'));
+            } else {
+                alert('No backups found');
+            }
+        }
+
+        async function loadAllData() {
+            await Promise.all([
+                loadStatus(),
+                loadDatabaseStats(),
+                loadMetrics(),
+                loadLeaderboard(),
+                loadCommandStats()
+            ]);
+        }
+
+        // Load data on page load
+        loadAllData();
+
+        // Auto-refresh every 30 seconds
+        setInterval(loadAllData, 30000);
+    </script>
+</body>
+</html>
