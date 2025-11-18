@@ -275,6 +275,101 @@ export class DatabaseManager {
     return stmt.all(limit);
   }
 
+  // Backup and Restore Methods
+  async createBackup(backupPath?: string): Promise<string> {
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const defaultBackupPath = path.join(
+      path.dirname(this.db.name),
+      'backups',
+      `backup-${timestamp}.db`
+    );
+    const finalBackupPath = backupPath || defaultBackupPath;
+
+    // Ensure backup directory exists
+    const backupDir = path.dirname(finalBackupPath);
+    if (!fs.existsSync(backupDir)) {
+      fs.mkdirSync(backupDir, { recursive: true });
+    }
+
+    try {
+      // Use SQLite backup API
+      await this.db.backup(finalBackupPath);
+      this.logger.info(`Database backup created at ${finalBackupPath}`);
+      return finalBackupPath;
+    } catch (error) {
+      this.logger.error('Failed to create database backup', error);
+      throw error;
+    }
+  }
+
+  async restoreBackup(backupPath: string): Promise<void> {
+    if (!fs.existsSync(backupPath)) {
+      throw new Error(`Backup file not found: ${backupPath}`);
+    }
+
+    try {
+      // Close current database
+      this.db.close();
+
+      // Copy backup to current database location
+      const dbPath = this.db.name;
+      fs.copyFileSync(backupPath, dbPath);
+
+      // Reopen database
+      this.db = new Database(dbPath);
+      this.db.pragma('journal_mode = WAL');
+
+      this.logger.info(`Database restored from ${backupPath}`);
+    } catch (error) {
+      this.logger.error('Failed to restore database backup', error);
+      throw error;
+    }
+  }
+
+  listBackups(): string[] {
+    const backupDir = path.join(path.dirname(this.db.name), 'backups');
+    if (!fs.existsSync(backupDir)) {
+      return [];
+    }
+
+    return fs
+      .readdirSync(backupDir)
+      .filter((file) => file.endsWith('.db'))
+      .map((file) => path.join(backupDir, file))
+      .sort()
+      .reverse();
+  }
+
+  async vacuum(): Promise<void> {
+    try {
+      this.db.exec('VACUUM');
+      this.logger.info('Database vacuumed successfully');
+    } catch (error) {
+      this.logger.error('Failed to vacuum database', error);
+      throw error;
+    }
+  }
+
+  getStats(): any {
+    const stats: any = {};
+
+    // Get table sizes
+    const tables = ['user_stats', 'guild_config', 'moderation_logs', 'analytics', 'command_usage'];
+    for (const table of tables) {
+      const result: any = this.db.prepare(`SELECT COUNT(*) as count FROM ${table}`).get();
+      stats[table] = result.count;
+    }
+
+    // Get database file size
+    const dbPath = this.db.name;
+    if (fs.existsSync(dbPath)) {
+      stats.fileSize = fs.statSync(dbPath).size;
+      stats.fileSizeMB = (stats.fileSize / (1024 * 1024)).toFixed(2);
+    }
+
+    return stats;
+  }
+
   close() {
     this.db.close();
     this.logger.info('Database connection closed');

@@ -2,6 +2,8 @@ import { EventEmitter } from 'events';
 import { Logger } from './Logger';
 import { DatabaseManager } from '../database/Database';
 import { AIManager } from '../ai/AIProvider';
+import { RateLimiter } from './RateLimiter';
+import { RetryHandler } from './RetryHandler';
 import {
   Platform,
   PlatformAdapter,
@@ -13,6 +15,8 @@ import {
 } from '../types';
 import { DiscordAdapter } from '../adapters/DiscordAdapter';
 import { WhatsAppAdapter } from '../adapters/WhatsAppAdapter';
+import { TelegramAdapter } from '../adapters/TelegramAdapter';
+import { SlackAdapter } from '../adapters/SlackAdapter';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -25,6 +29,8 @@ export class BotCore extends EventEmitter {
   private database: DatabaseManager;
   private aiManager?: AIManager;
   private commandPrefix: string;
+  private rateLimiter: RateLimiter;
+  private retryHandler: RetryHandler;
 
   constructor() {
     super();
@@ -34,12 +40,21 @@ export class BotCore extends EventEmitter {
     this.plugins = [];
     this.commandPrefix = process.env.COMMAND_PREFIX || '!';
 
+    // Initialize rate limiter
+    const rateLimitEnabled = process.env.RATE_LIMIT_ENABLED !== 'false';
+    const windowMs = parseInt(process.env.RATE_LIMIT_WINDOW_MS || '60000');
+    const maxRequests = parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || '10');
+    this.rateLimiter = new RateLimiter(windowMs, maxRequests, rateLimitEnabled);
+
+    // Initialize retry handler
+    this.retryHandler = new RetryHandler();
+
     // Initialize database
     const dbPath = process.env.DATABASE_PATH || './data/autoguild.db';
     this.database = new DatabaseManager(dbPath);
 
     // Initialize AI if configured
-    if (process.env.AI_PROVIDER && process.env.ANTHROPIC_API_KEY || process.env.OPENAI_API_KEY) {
+    if (process.env.AI_PROVIDER && (process.env.ANTHROPIC_API_KEY || process.env.OPENAI_API_KEY)) {
       this.initializeAI();
     }
 
@@ -130,6 +145,8 @@ export class BotCore extends EventEmitter {
   }
 
   private async executeCommand(command: BotCommand, message: UniversalMessage, args: string[]) {
+    const startTime = Date.now();
+
     try {
       // Check platform compatibility
       if (command.platforms && !command.platforms.includes(message.platform)) {
@@ -149,6 +166,18 @@ export class BotCore extends EventEmitter {
           );
           return;
         }
+      }
+
+      // Check rate limit
+      const rateLimitKey = `${message.author.id}:${command.name}`;
+      if (this.rateLimiter.isRateLimited(rateLimitKey)) {
+        const resetTime = this.rateLimiter.getResetTime(rateLimitKey);
+        const adapter = this.adapters.get(message.platform);
+        await adapter?.sendMessage(
+          message.channelId,
+          `⏱️ Please wait ${resetTime} seconds before using this command again.`
+        );
+        return;
       }
 
       // Track command usage
@@ -173,8 +202,22 @@ export class BotCore extends EventEmitter {
       };
 
       await command.execute(context);
+
+      // Track metrics if available
+      const duration = Date.now() - startTime;
+      if ((this as any).metrics) {
+        (this as any).metrics.trackCommand(command.name, duration, true);
+      }
     } catch (error) {
       this.logger.error(`Error executing command ${command.name}`, error);
+
+      // Track metrics if available
+      const duration = Date.now() - startTime;
+      if ((this as any).metrics) {
+        (this as any).metrics.trackCommand(command.name, duration, false);
+        (this as any).metrics.trackError('command_execution');
+      }
+
       const adapter = this.adapters.get(message.platform);
       await adapter?.sendMessage(message.channelId, 'An error occurred while executing the command.');
     }
@@ -215,12 +258,33 @@ export class BotCore extends EventEmitter {
         adapter = new WhatsAppAdapter(this);
         break;
 
+      case Platform.TELEGRAM:
+        if (!process.env.TELEGRAM_TOKEN) {
+          throw new Error('Telegram token not found in environment variables');
+        }
+        adapter = new TelegramAdapter(process.env.TELEGRAM_TOKEN, this);
+        break;
+
+      case Platform.SLACK:
+        if (!process.env.SLACK_TOKEN) {
+          throw new Error('Slack token not found in environment variables');
+        }
+        adapter = new SlackAdapter(process.env.SLACK_TOKEN, this);
+        break;
+
       default:
         throw new Error(`Unsupported platform: ${platform}`);
     }
 
     this.adapters.set(platform, adapter);
-    await adapter.initialize();
+
+    // Use retry handler for platform initialization
+    await this.retryHandler.executeWithRetry(
+      () => adapter.initialize(),
+      {},
+      `${platform} initialization`
+    );
+
     this.logger.info(`Platform ${platform} added successfully`);
   }
 
