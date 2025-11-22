@@ -106,6 +106,33 @@ async function main() {
       }
     }
 
+    if (config.TEAMS_ENABLED === 'true' && config.TEAMS_APP_ID && config.TEAMS_APP_PASSWORD) {
+      try {
+        await bot.addPlatform(Platform.TEAMS);
+        logger.info('✅ Microsoft Teams platform initialized');
+      } catch (error) {
+        logger.error('Failed to initialize Teams', error);
+      }
+    }
+
+    if (config.MATRIX_ENABLED === 'true' && config.MATRIX_ACCESS_TOKEN) {
+      try {
+        await bot.addPlatform(Platform.MATRIX);
+        logger.info('✅ Matrix platform initialized');
+      } catch (error) {
+        logger.error('Failed to initialize Matrix', error);
+      }
+    }
+
+    if (config.GUILDED_ENABLED === 'true' && config.GUILDED_TOKEN) {
+      try {
+        await bot.addPlatform(Platform.GUILDED);
+        logger.info('✅ Guilded platform initialized');
+      } catch (error) {
+        logger.error('Failed to initialize Guilded', error);
+      }
+    }
+
     // Check if at least one platform is enabled
     const platformCount = (bot as any).adapters.size;
     if (platformCount === 0) {

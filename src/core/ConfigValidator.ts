@@ -60,6 +60,17 @@ const ConfigSchema = z.object({
   TEAMS_APP_ID: z.string().optional(),
   TEAMS_APP_PASSWORD: z.string().optional(),
   TEAMS_ENABLED: z.enum(['true', 'false']).default('false'),
+  TEAMS_PORT: z.string().regex(/^\d+$/).default('3003'),
+
+  // Matrix (optional)
+  MATRIX_HOMESERVER: z.string().optional(),
+  MATRIX_ACCESS_TOKEN: z.string().optional(),
+  MATRIX_USER_ID: z.string().optional(),
+  MATRIX_ENABLED: z.enum(['true', 'false']).default('false'),
+
+  // Guilded (optional)
+  GUILDED_TOKEN: z.string().optional(),
+  GUILDED_ENABLED: z.enum(['true', 'false']).default('false'),
 });
 
 export type Config = z.infer<typeof ConfigSchema>;
@@ -100,6 +111,8 @@ export class ConfigValidator {
       this.config.TELEGRAM_ENABLED === 'true' && this.config.TELEGRAM_TOKEN,
       this.config.SLACK_ENABLED === 'true' && this.config.SLACK_TOKEN,
       this.config.TEAMS_ENABLED === 'true' && this.config.TEAMS_APP_ID,
+      this.config.MATRIX_ENABLED === 'true' && this.config.MATRIX_ACCESS_TOKEN,
+      this.config.GUILDED_ENABLED === 'true' && this.config.GUILDED_TOKEN,
     ];
 
     if (!platforms.some(Boolean)) {
@@ -143,6 +156,18 @@ export class ConfigValidator {
       }
     }
 
+    // Matrix validation
+    if (this.config.MATRIX_ENABLED === 'true') {
+      if (!this.config.MATRIX_HOMESERVER || !this.config.MATRIX_ACCESS_TOKEN || !this.config.MATRIX_USER_ID) {
+        errors.push('Matrix is enabled but MATRIX_HOMESERVER, MATRIX_ACCESS_TOKEN, or MATRIX_USER_ID is not configured.');
+      }
+    }
+
+    // Guilded validation
+    if (this.config.GUILDED_ENABLED === 'true' && !this.config.GUILDED_TOKEN) {
+      errors.push('Guilded is enabled but GUILDED_TOKEN is not configured.');
+    }
+
     return { errors, warnings };
   }
 
@@ -164,6 +189,8 @@ export class ConfigValidator {
     this.logger.info(`  - Telegram: ${this.config.TELEGRAM_ENABLED === 'true' ? '✓ Enabled' : '✗ Disabled'}`);
     this.logger.info(`  - Slack: ${this.config.SLACK_ENABLED === 'true' ? '✓ Enabled' : '✗ Disabled'}`);
     this.logger.info(`  - Teams: ${this.config.TEAMS_ENABLED === 'true' ? '✓ Enabled' : '✗ Disabled'}`);
+    this.logger.info(`  - Matrix: ${this.config.MATRIX_ENABLED === 'true' ? '✓ Enabled' : '✗ Disabled'}`);
+    this.logger.info(`  - Guilded: ${this.config.GUILDED_ENABLED === 'true' ? '✓ Enabled' : '✗ Disabled'}`);
     this.logger.info('');
     this.logger.info('Features:');
     this.logger.info(`  - AI Provider: ${this.config.AI_PROVIDER || 'Not configured'}`);
