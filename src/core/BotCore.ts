@@ -17,6 +17,9 @@ import { DiscordAdapter } from '../adapters/DiscordAdapter';
 import { WhatsAppAdapter } from '../adapters/WhatsAppAdapter';
 import { TelegramAdapter } from '../adapters/TelegramAdapter';
 import { SlackAdapter } from '../adapters/SlackAdapter';
+import { TeamsAdapter } from '../adapters/TeamsAdapter';
+import { MatrixAdapter } from '../adapters/MatrixAdapter';
+import { GuildedAdapter } from '../adapters/GuildedAdapter';
 import dotenv from 'dotenv';
 
 dotenv.config();
@@ -270,6 +273,32 @@ export class BotCore extends EventEmitter {
           throw new Error('Slack token not found in environment variables');
         }
         adapter = new SlackAdapter(process.env.SLACK_TOKEN, this);
+        break;
+
+      case Platform.TEAMS:
+        if (!process.env.TEAMS_APP_ID || !process.env.TEAMS_APP_PASSWORD) {
+          throw new Error('Teams credentials not found in environment variables');
+        }
+        adapter = new TeamsAdapter(process.env.TEAMS_APP_ID, process.env.TEAMS_APP_PASSWORD, this);
+        break;
+
+      case Platform.MATRIX:
+        if (!process.env.MATRIX_HOMESERVER || !process.env.MATRIX_ACCESS_TOKEN || !process.env.MATRIX_USER_ID) {
+          throw new Error('Matrix credentials not found in environment variables');
+        }
+        adapter = new MatrixAdapter(
+          process.env.MATRIX_HOMESERVER,
+          process.env.MATRIX_ACCESS_TOKEN,
+          process.env.MATRIX_USER_ID,
+          this
+        );
+        break;
+
+      case Platform.GUILDED:
+        if (!process.env.GUILDED_TOKEN) {
+          throw new Error('Guilded token not found in environment variables');
+        }
+        adapter = new GuildedAdapter(process.env.GUILDED_TOKEN, this);
         break;
 
       default:

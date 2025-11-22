@@ -7,6 +7,9 @@ export enum Platform {
   WHATSAPP = 'whatsapp',
   TELEGRAM = 'telegram',
   SLACK = 'slack',
+  TEAMS = 'teams',
+  MATRIX = 'matrix',
+  GUILDED = 'guilded',
 }
 
 export enum MessageType {
