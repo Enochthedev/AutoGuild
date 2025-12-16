@@ -113,7 +113,7 @@ export class TelegramAdapter extends BasePlatformAdapter {
 
   async deleteMessage(channelId: string, messageId: string): Promise<void> {
     try {
-      await this.bot.deleteMessage(channelId, messageId);
+      await this.bot.deleteMessage(channelId, parseInt(messageId));
     } catch (error) {
       this.log(`Failed to delete message: ${error}`, 'error');
       throw error;

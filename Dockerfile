@@ -10,6 +10,7 @@ COPY package*.json ./
 COPY tsconfig.json ./
 
 # Install dependencies (including dev dependencies for build)
+ENV PUPPETEER_SKIP_DOWNLOAD=true
 RUN npm ci
 
 # Copy source code
@@ -27,13 +28,17 @@ WORKDIR /app
 COPY package*.json ./
 
 # Install only production dependencies
+ENV PUPPETEER_SKIP_DOWNLOAD=true
 RUN npm ci --only=production && npm cache clean --force
 
 # Stage 3: Production image
 FROM node:18-alpine
 
-# Install dumb-init for proper signal handling
-RUN apk add --no-cache dumb-init
+# Install dumb-init for proper signal handling and Chromium for WhatsApp
+RUN apk add --no-cache dumb-init chromium
+
+# Set Puppeteer executable path
+ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
 
 # Create app user for security
 RUN addgroup -g 1001 -S nodejs && \
@@ -51,7 +56,8 @@ COPY --from=deps --chown=nodejs:nodejs /app/node_modules ./node_modules
 COPY --chown=nodejs:nodejs package*.json ./
 
 # Create necessary directories
-RUN mkdir -p logs data && chown -R nodejs:nodejs logs data
+RUN mkdir -p logs data .wwebjs_auth .wwebjs_cache && \
+    chown -R nodejs:nodejs logs data .wwebjs_auth .wwebjs_cache
 
 # Switch to non-root user
 USER nodejs

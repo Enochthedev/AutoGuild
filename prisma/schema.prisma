@@ -1,0 +1,186 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "cockroachdb"
+}
+
+// ==========================================
+// Identity & Access Management (Global)
+// ==========================================
+
+model User {
+  id            String    @id @default(uuid())
+  username      String?
+  status        String    @default("active") // 'active', 'banned', 'suspended'
+  bannedAt      DateTime?
+  banReason     String?
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  // Cross-platform identities linked to this user
+  identities    Identity[]
+  
+  // Global metadata
+  metadata      Json?
+  
+  // Relationships
+  moderationLogs ModerationLog[]
+  
+  @@index([username])
+}
+
+model Identity {
+  id            String    @id @default(uuid())
+  platform      String    // 'discord', 'whatsapp', 'telegram'
+  platformId    String    // External ID
+  username      String?
+  
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  createdAt     DateTime  @default(now())
+  
+  @@unique([platform, platformId])
+  @@index([userId])
+}
+
+// ==========================================
+// Community & Guild Management
+// ==========================================
+
+model Guild {
+  id            String    @id // UUID or Composite
+  platform      String
+  platformId    String
+  name          String?
+  
+  config        Json?
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  channels      Channel[]
+  logs          ModerationLog[]
+  events        ScheduledEvent[]
+  
+  @@unique([platform, platformId])
+  @@index([platform])
+}
+
+model Channel {
+  id            String    @id
+  platformId    String
+  guildId       String
+  guild         Guild     @relation(fields: [guildId], references: [id], onDelete: Cascade)
+  
+  name          String?
+  type          String?
+  
+  currentMode   String?
+  modeData      Json?
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  @@unique([guildId, platformId])
+  @@index([guildId])
+  @@index([currentMode])
+}
+
+// ==========================================
+// Action Logs (Time-Series)
+// ==========================================
+
+model ModerationLog {
+  id            String    @id @default(uuid())
+  action        String
+  reason        String?
+  
+  targetUserId  String
+  targetUser    User      @relation(fields: [targetUserId], references: [id])
+  
+  moderatorId   String?
+  
+  guildId       String?
+  guild         Guild?    @relation(fields: [guildId], references: [id])
+  
+  timestamp     DateTime  @default(now())
+  deletedAt     DateTime? // Soft delete
+  
+  @@index([timestamp])
+  @@index([targetUserId])
+  @@index([deletedAt])
+}
+
+// ==========================================
+// AI Memory & Knowledge Base
+// ==========================================
+
+model Memory {
+  id            String    @id @default(uuid())
+  content       String
+  type          String
+  
+  source        Json?
+  importance    Float     @default(0.5)
+  tags          String[]
+  
+  // Hybrid approach:
+  embedding     Float[]  // pgvector support (requires postgresql)
+  weaviateId    String?
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  @@index([type])
+  @@index([importance])
+  @@index([createdAt])
+  @@index([weaviateId])
+}
+
+// ==========================================
+// Orchestration & Jobs
+// ==========================================
+
+model ScheduledEvent {
+  id            String    @id @default(uuid())
+  guildId       String
+  guild         Guild     @relation(fields: [guildId], references: [id])
+  
+  name          String
+  startTime     DateTime
+  status        String
+  
+  actionType    String
+  actionData    Json
+  
+  createdAt     DateTime  @default(now())
+}
+
+// ==========================================
+// Rate Limiting
+// ==========================================
+
+model RateLimit {
+  id            String    @id @default(uuid())
+  key           String    // 'discord:api', 'openrouter:user123'
+  count         Int       @default(0)
+  windowStart   DateTime  @default(now())
+  
+  @@unique([key])
+  @@index([windowStart])
+}
+
+// ==========================================
+// Compatibility Layer
+// ==========================================
+
+model KeyValue {
+  key           String    @id
+  value         String
+  guildId       String?
+  updatedAt     DateTime  @updatedAt
+}

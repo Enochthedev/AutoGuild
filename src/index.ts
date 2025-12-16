@@ -19,7 +19,7 @@ const logger = new Logger('Main');
 const startTime = new Date();
 
 async function main() {
-  logger.info('🚀 Starting AutoGuild...');
+  logger.info('🚀 Starting Guildly...');
   logger.info('='.repeat(50));
 
   // Ensure required directories exist
@@ -170,7 +170,7 @@ async function main() {
 
     // All systems ready
     logger.info('='.repeat(50));
-    logger.info('✅ AutoGuild is now running!');
+    logger.info('✅ Guildly is now running!');
     logger.info('');
     logger.info('📊 Status:');
     logger.info(`   Platforms: ${platformCount}`);
@@ -205,7 +205,7 @@ async function main() {
       // Shutdown bot
       await bot.shutdown();
 
-      logger.info('✅ AutoGuild shut down successfully');
+      logger.info('✅ Guildly shut down successfully');
       process.exit(0);
     };
 
@@ -228,7 +228,7 @@ async function main() {
     });
 
   } catch (error) {
-    logger.error('❌ Failed to start AutoGuild', error);
+    logger.error('❌ Failed to start Guildly', error);
     process.exit(1);
   }
 }

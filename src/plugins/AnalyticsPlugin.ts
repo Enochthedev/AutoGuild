@@ -69,7 +69,7 @@ export class AnalyticsPlugin implements Plugin {
         const topUsers = this.context.database.getTopActiveUsers(ctx.platform, limit);
 
         let response = `🏆 **Top Active Users**\n\n`;
-        topUsers.forEach((user, index) => {
+        topUsers.forEach((user: any, index: number) => {
           response += `${index + 1}. User ${user.userId} - ${user.messageCount} messages\n`;
         });
 

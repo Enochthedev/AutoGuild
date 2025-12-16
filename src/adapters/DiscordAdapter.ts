@@ -121,7 +121,7 @@ export class DiscordAdapter extends BasePlatformAdapter {
     return {
       id: user.id,
       username: user.username || 'Unknown',
-      displayName: member?.displayName || user.username,
+      displayName: member?.displayName || user.username || 'Unknown',
       platform: Platform.DISCORD,
       platformSpecificId: user.id,
       roles,
@@ -206,7 +206,7 @@ export class DiscordAdapter extends BasePlatformAdapter {
 
       const baseChannel: UniversalChannel = {
         id: channel.id,
-        name: 'name' in channel ? channel.name : 'DM',
+        name: ('name' in channel && channel.name) ? channel.name : 'DM',
         platform: Platform.DISCORD,
         type: channel.isDMBased() ? 'dm' : 'text',
         guildId: 'guildId' in channel ? channel.guildId : undefined,
@@ -244,6 +244,42 @@ export class DiscordAdapter extends BasePlatformAdapter {
       });
     } catch (error) {
       this.log(`Failed to set presence: ${error}`, 'error');
+    }
+  }
+
+  async createChannel(guildId: string, name: string, type: 'text' | 'voice'): Promise<UniversalChannel | null> {
+    try {
+      const guild = await this.client.guilds.fetch(guildId);
+      if (!guild) return null;
+
+      const discordType = type === 'voice' ? 2 : 0; // 0 = GUILD_TEXT, 2 = GUILD_VOICE
+      const channel = await guild.channels.create({
+        name,
+        type: discordType,
+      });
+
+      return {
+        id: channel.id,
+        name: channel.name,
+        platform: Platform.DISCORD,
+        type: type,
+        guildId: guild.id,
+      };
+    } catch (error) {
+      this.log(`Failed to create channel: ${error}`, 'error');
+      return null;
+    }
+  }
+
+  async deleteChannel(channelId: string): Promise<void> {
+    try {
+      const channel = await this.client.channels.fetch(channelId);
+      if (channel && !channel.isDMBased()) {
+        await channel.delete();
+      }
+    } catch (error) {
+      this.log(`Failed to delete channel: ${error}`, 'error');
+      throw error;
     }
   }
 
