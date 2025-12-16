@@ -211,7 +211,7 @@ export class GuildedAdapter extends BasePlatformAdapter {
 
       if (!response.ok) return null;
 
-      const data = await response.json();
+      const data: any = await response.json();
       return {
         id: data.user.id,
         username: data.user.name,
@@ -237,7 +237,7 @@ export class GuildedAdapter extends BasePlatformAdapter {
 
       if (!response.ok) return null;
 
-      const data = await response.json();
+      const data: any = await response.json();
       return {
         id: data.channel.id,
         name: data.channel.name,
@@ -261,7 +261,7 @@ export class GuildedAdapter extends BasePlatformAdapter {
 
       if (!response.ok) return null;
 
-      const data = await response.json();
+      const data: any = await response.json();
       return {
         id: data.server.id,
         name: data.server.name,

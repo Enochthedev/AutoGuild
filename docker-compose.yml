@@ -75,6 +75,94 @@ services:
     depends_on:
       - prometheus
 
+  # Local LLM Service (CPU / Mac)
+  ollama:
+    image: ollama/ollama:latest
+    container_name: autoguild-ollama
+    restart: unless-stopped
+    volumes:
+      - ollama-data:/root/.ollama
+    ports:
+      - "11434:11434"
+    networks:
+      - autoguild-network
+    profiles:
+      - llm
+      - cpu
+
+  # Local LLM Service (NVIDIA GPU)
+  ollama-gpu:
+    image: ollama/ollama:latest
+    container_name: autoguild-ollama-gpu
+    restart: unless-stopped
+    volumes:
+      - ollama-data:/root/.ollama
+    ports:
+      - "11434:11434"
+    networks:
+      - autoguild-network
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    profiles:
+      - gpu
+
+  # Core Database (CockroachDB)
+  cockroach:
+    image: cockroachdb/cockroach:latest
+    container_name: autoguild-cockroach
+    restart: unless-stopped
+    command: start-single-node --insecure
+    volumes:
+      - cockroach-data:/cockroach/cockroach-data
+    ports:
+      - "26257:26257"
+      - "8080:8080"
+    networks:
+      - autoguild-network
+    profiles:
+      - db
+
+  # Cache & Queues (Redis)
+  redis:
+    image: redis:alpine
+    container_name: autoguild-redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - autoguild-network
+    profiles:
+      - db
+
+  # Vector Database (Weaviate)
+  weaviate:
+    image: semitechnologies/weaviate:1.24.1
+    container_name: autoguild-weaviate
+    ports:
+      - "8081:8080"
+      - "50051:50051"
+    restart: on-failure:0
+    environment:
+      QUERY_DEFAULTS_LIMIT: 25
+      AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED: 'true'
+      PERSISTENCE_DATA_PATH: '/var/lib/weaviate'
+      DEFAULT_VECTORIZER_MODULE: 'none'
+      ENABLE_MODULES: ''
+      CLUSTER_HOSTNAME: 'node1'
+    volumes:
+      - weaviate-data:/var/lib/weaviate
+    networks:
+      - autoguild-network
+    profiles:
+      - db
+
 networks:
   autoguild-network:
     driver: bridge
@@ -82,3 +170,7 @@ networks:
 volumes:
   prometheus-data:
   grafana-data:
+  ollama-data:
+  cockroach-data:
+  redis-data:
+  weaviate-data:

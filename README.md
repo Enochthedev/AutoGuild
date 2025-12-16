@@ -206,10 +206,45 @@ ANTHROPIC_MODEL=claude-3-5-sonnet-20241022
 
 #### OpenAI
 ```env
-AI_PROVIDER=openai
-OPENAI_API_KEY=sk-...
 OPENAI_MODEL=gpt-4-turbo-preview
 ```
+
+#### OpenRouter
+```env
+AI_PROVIDER=openrouter
+OPENROUTER_API_KEY=sk-or-...
+OPENROUTER_MODEL=openai/gpt-3.5-turbo
+```
+
+### 🧠 Local AI & Memory System
+
+Sox includes a deep memory system powered by local AI.
+
+- **Short-Term Memory**: Instant recall of recent chat history (RAM).
+- **Long-Term Memory**: Semantic search and persistent facts (SQLite + Vector Embeddings).
+- **Local LLM**: Uses **Ollama** to summarize conversations without sending data to the cloud.
+
+#### 1. Start Local Services
+
+You must use Docker to run the local AI services.
+
+**For Mac (Apple Silicon / CPU):**
+```bash
+docker-compose --profile cpu up -d
+```
+
+**For NVIDIA GPU:**
+```bash
+docker-compose --profile gpu up -d
+```
+
+#### 2. Install the Brain
+Once the container is running (`autoguild-ollama`), download the lightweight model:
+```bash
+docker exec -it autoguild-ollama ollama pull phi3:mini
+```
+
+Sox will now automatically consolidate memories every 5 minutes! 🧠
 
 ## 🔌 Plugin Development
 

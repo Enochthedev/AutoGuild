@@ -77,6 +77,20 @@ export class MetricsService {
       help: 'Bot uptime in seconds',
       value: 0,
     });
+
+    this.registerMetric({
+      name: 'autoguild_ai_tokens_total',
+      type: 'counter',
+      help: 'Total number of AI tokens used',
+      value: 0,
+    });
+
+    this.registerMetric({
+      name: 'autoguild_ai_cost_estimated_usd',
+      type: 'counter',
+      help: 'Estimated cost of AI usage in USD',
+      value: 0,
+    });
   }
 
   public registerMetric(metric: Metric): void {
@@ -242,5 +256,20 @@ export class MetricsService {
   public updateUptime(startTime: Date): void {
     const uptimeSeconds = Math.floor((Date.now() - startTime.getTime()) / 1000);
     this.setGauge('autoguild_uptime_seconds', uptimeSeconds);
+  }
+
+  /**
+   * Track AI Token Usage and Cost
+   * Simple estimation: $0.002 per 1k input, $0.002 per 1k output (generic gpt-3.5 average for now)
+   */
+  public trackAICost(promptTokens: number, completionTokens: number, model: string): void {
+    const totalTokens = promptTokens + completionTokens;
+    this.incrementCounter('autoguild_ai_tokens_total', totalTokens, { model });
+
+    // Very rough cost estimation (update with real rates per model if critical)
+    const costPer1k = 0.002;
+    const estimatedCost = (totalTokens / 1000) * costPer1k;
+
+    this.incrementCounter('autoguild_ai_cost_estimated_usd', estimatedCost, { model });
   }
 }

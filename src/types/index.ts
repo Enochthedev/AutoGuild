@@ -112,6 +112,8 @@ export interface PlatformAdapter {
   getUser: (userId: string) => Promise<UniversalUser | null>;
   getChannel: (channelId: string) => Promise<UniversalChannel | null>;
   getGuild: (guildId: string) => Promise<UniversalGuild | null>;
+  createChannel?: (guildId: string, name: string, type: 'text' | 'voice') => Promise<UniversalChannel | null>;
+  deleteChannel?: (channelId: string) => Promise<void>;
   setPresence?: (status: string, activity?: string) => Promise<void>;
   shutdown: () => Promise<void>;
 }
@@ -135,7 +137,7 @@ export interface Plugin {
 }
 
 export interface AIProviderConfig {
-  provider: 'openai' | 'anthropic';
+  provider: 'openai' | 'anthropic' | 'openrouter';
   apiKey: string;
   model: string;
   temperature?: number;
@@ -155,4 +157,25 @@ export interface AIResponse {
     totalTokens: number;
   };
   model: string;
+}
+
+export enum ActionType {
+  CREATE_CHANNEL = 'create_channel',
+  DELETE_CHANNEL = 'delete_channel',
+  SEND_MESSAGE = 'send_message',
+  SCHEDULE_EVENT = 'schedule_event',
+  STORE_MEMORY = 'store_memory',
+  READ_MEMORY = 'read_memory',
+  TRACE_COST = 'trace_cost',
+}
+
+export interface AIAction {
+  type: ActionType;
+  params: Record<string, any>;
+  reason?: string;
+}
+
+export interface AIActionResponse {
+  response: string; // The conversational response to the user
+  actions?: AIAction[]; // List of actions the AI wants to perform
 }

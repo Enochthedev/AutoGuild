@@ -13,44 +13,7 @@ export class EngagementPlugin implements Plugin {
   }
 
   commands = [
-    {
-      name: 'ask',
-      description: 'Ask the AI assistant a question',
-      usage: '!ask <question>',
-      execute: async (ctx: CommandContext) => {
-        const ai = this.context.bot.getAI();
-        if (!ai) {
-          const adapter = this.context.bot.getAdapter(ctx.platform);
-          await adapter?.sendMessage(ctx.channel.id, 'AI features are not enabled.');
-          return;
-        }
 
-        if (ctx.args.length === 0) {
-          const adapter = this.context.bot.getAdapter(ctx.platform);
-          await adapter?.sendMessage(ctx.channel.id, 'Usage: !ask <question>');
-          return;
-        }
-
-        const question = ctx.args.join(' ');
-        const adapter = this.context.bot.getAdapter(ctx.platform);
-
-        try {
-          await adapter?.sendMessage(ctx.channel.id, '🤔 Thinking...');
-
-          const response = await ai.generateEngagementResponse(
-            'You are a helpful community assistant.',
-            question
-          );
-
-          await adapter?.sendMessage(ctx.channel.id, `💡 ${response}`);
-        } catch (error) {
-          await adapter?.sendMessage(
-            ctx.channel.id,
-            'Sorry, I encountered an error while processing your question.'
-          );
-        }
-      },
-    },
     {
       name: 'poll',
       description: 'Create a quick poll',

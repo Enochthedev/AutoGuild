@@ -4,6 +4,8 @@ import { DatabaseManager } from '../database/Database';
 import { AIManager } from '../ai/AIProvider';
 import { RateLimiter } from './RateLimiter';
 import { RetryHandler } from './RetryHandler';
+import { MemoryManager } from '../memory/MemoryManager';
+import { QueueManager } from './QueueManager';
 import {
   Platform,
   PlatformAdapter,
@@ -34,6 +36,8 @@ export class BotCore extends EventEmitter {
   private commandPrefix: string;
   private rateLimiter: RateLimiter;
   private retryHandler: RetryHandler;
+  private memory: MemoryManager;
+  private queueManager: QueueManager;
 
   constructor() {
     super();
@@ -53,11 +57,23 @@ export class BotCore extends EventEmitter {
     this.retryHandler = new RetryHandler();
 
     // Initialize database
-    const dbPath = process.env.DATABASE_PATH || './data/autoguild.db';
+    const dbPath = process.env.DATABASE_PATH || './data/guildly.db';
     this.database = new DatabaseManager(dbPath);
 
+    // Initialize memory system (short-term + long-term)
+    // Now powered by the main DatabaseManager (Prisma/CockroachDB)
+    this.memory = new MemoryManager(this.database);
+
+    // Initialize Queue System
+    this.queueManager = new QueueManager(this);
+
     // Initialize AI if configured
-    if (process.env.AI_PROVIDER && (process.env.ANTHROPIC_API_KEY || process.env.OPENAI_API_KEY)) {
+    if (
+      process.env.AI_PROVIDER &&
+      (process.env.ANTHROPIC_API_KEY ||
+        process.env.OPENAI_API_KEY ||
+        process.env.OPENROUTER_API_KEY)
+    ) {
       this.initializeAI();
     }
 
@@ -65,16 +81,30 @@ export class BotCore extends EventEmitter {
   }
 
   private initializeAI() {
-    const provider = process.env.AI_PROVIDER as 'openai' | 'anthropic';
-    const apiKey =
-      provider === 'openai' ? process.env.OPENAI_API_KEY : process.env.ANTHROPIC_API_KEY;
-    const model =
-      provider === 'openai'
-        ? process.env.OPENAI_MODEL || 'gpt-4-turbo-preview'
-        : process.env.ANTHROPIC_MODEL || 'claude-3-5-sonnet-20241022';
+    const provider = process.env.AI_PROVIDER as 'openai' | 'anthropic' | 'openrouter';
+    let apiKey: string | undefined;
+    let model: string;
+
+    switch (provider) {
+      case 'openai':
+        apiKey = process.env.OPENAI_API_KEY;
+        model = process.env.OPENAI_MODEL || 'gpt-4-turbo-preview';
+        break;
+      case 'anthropic':
+        apiKey = process.env.ANTHROPIC_API_KEY;
+        model = process.env.ANTHROPIC_MODEL || 'claude-3-5-sonnet-20241022';
+        break;
+      case 'openrouter':
+        apiKey = process.env.OPENROUTER_API_KEY;
+        model = process.env.OPENROUTER_MODEL || 'openai/gpt-3.5-turbo';
+        break;
+      default:
+        this.logger.warn(`Unknown AI provider: ${provider}`);
+        return;
+    }
 
     if (!apiKey) {
-      this.logger.warn('AI provider configured but no API key found');
+      this.logger.warn(`AI provider ${provider} configured but no API key found`);
       return;
     }
 
@@ -92,38 +122,80 @@ export class BotCore extends EventEmitter {
 
   private setupEventHandlers() {
     this.on('message', async (message: UniversalMessage) => {
-      try {
-        // Track user activity
-        this.database.trackUserActivity(message.author.id, message.platform);
-
-        // Process commands
-        if (message.content.startsWith(this.commandPrefix)) {
-          await this.handleCommand(message);
-        }
-
-        // Notify plugins
-        for (const plugin of this.plugins) {
-          if (plugin.onMessage) {
-            await plugin.onMessage(message);
-          }
-        }
-
-        // Auto-response with AI (if enabled)
-        if (
-          this.aiManager &&
-          process.env.ENABLE_AUTO_RESPONSES === 'true' &&
-          message.content.toLowerCase().includes('autoguild')
-        ) {
-          await this.handleAIResponse(message);
-        }
-      } catch (error) {
-        this.logger.error('Error handling message', error);
-      }
+      // Push to queue instead of processing immediately
+      await this.queueManager.addMessage({
+        platform: message.platform,
+        channelId: message.channelId,
+        userId: message.author.id,
+        username: message.author.username,
+        content: message.content,
+        guildId: message.guildId,
+        timestamp: message.timestamp.getTime()
+      });
     });
 
     this.on('platform:ready', (platform: Platform) => {
       this.logger.info(`Platform ${platform} is ready`);
     });
+  }
+
+
+
+  /**
+   * Process a message (called by Queue Worker)
+   */
+  public async processMessage(input: any) {
+    // Reconstruct UniversalMessage
+    const message: UniversalMessage = {
+      id: input.id || 'job-id',
+      content: input.content,
+      platform: input.platform,
+      channelId: input.channelId,
+      guildId: input.guildId,
+      timestamp: new Date(input.timestamp),
+      type: 'text' as any,
+      author: {
+        id: input.userId,
+        username: input.username,
+        platform: input.platform,
+        platformSpecificId: input.userId,
+        isBot: false,
+        roles: []
+      }
+    };
+
+    try {
+      // Track user activity
+      this.database.trackUserActivity(message.author.id, message.platform);
+
+      // Process commands
+      if (message.content.startsWith(this.commandPrefix)) {
+        await this.handleCommand(message);
+        return;
+      }
+
+      // Notify plugins
+      for (const plugin of this.plugins) {
+        if (plugin.onMessage) {
+          await plugin.onMessage(message);
+        }
+      }
+
+      // Check if bot is mentioned or if it's a DM/reply to bot
+      const isMentioned = message.mentions?.some(user => user.isBot && user.id === (this.adapters.get(message.platform) as any)?.client?.user?.id) || message.content.toLowerCase().includes('sox');
+      const isDM = message.guildId === undefined;
+
+      // Auto-response with AI
+      if (
+        this.aiManager &&
+        process.env.ENABLE_AUTO_RESPONSES === 'true' &&
+        (isMentioned || isDM)
+      ) {
+        await this.handleAIResponse(message);
+      }
+    } catch (error) {
+      this.logger.error('Error handling message', error);
+    }
   }
 
   private async handleCommand(message: UniversalMessage) {
@@ -193,7 +265,7 @@ export class BotCore extends EventEmitter {
 
       const channel = await this.adapters.get(message.platform)?.getChannel(message.channelId);
       const guild = message.guildId
-        ? await this.adapters.get(message.platform)?.getGuild(message.guildId)
+        ? (await this.adapters.get(message.platform)?.getGuild(message.guildId)) || undefined
         : undefined;
 
       const context: CommandContext = {
@@ -226,19 +298,152 @@ export class BotCore extends EventEmitter {
     }
   }
 
+  /**
+   * Execute an abstract action generated by AI (Called by Queue Worker)
+   */
+  public async executeAction(action: { type: string; platform: Platform; params: any }) {
+    this.logger.info(`Executing action: ${action.type} on ${action.platform}`, action.params);
+
+    const adapter = this.adapters.get(action.platform);
+    if (!adapter) {
+      this.logger.error(`No adapter found for platform: ${action.platform}`);
+      return;
+    }
+
+    // Common params
+    const { channelId, guildId } = action.params;
+
+    try {
+      switch (action.type) {
+        case 'send_message':
+          if (channelId && action.params.content) {
+            await adapter.sendMessage(channelId, action.params.content);
+          }
+          break;
+
+        case 'create_channel': {
+          if (adapter.createChannel && guildId) {
+            const { name, type } = action.params;
+            const newChannel = await adapter.createChannel(guildId, name, type || 'text');
+            if (newChannel && channelId) {
+              await adapter.sendMessage(channelId, `✅ I've created the channel #${newChannel.name} for you!`);
+            } else if (channelId) {
+              await adapter.sendMessage(channelId, `❌ I tried to create the channel but hit a snag. Check my permissions?`);
+            }
+          } else if (channelId) {
+            await adapter.sendMessage(channelId, "I can't create channels here, sorry!");
+          }
+          break;
+        }
+
+        case 'delete_channel': {
+          if (adapter.deleteChannel) {
+            const { channel_id } = action.params;
+            const targetId = channel_id === 'current_channel' ? channelId : channel_id;
+
+            if (targetId) {
+              if (channelId) await adapter.sendMessage(channelId, `🗑️ Deleting channel...`);
+              // Slight delay handled by queue delay optionally, or here
+              await adapter.deleteChannel(targetId);
+            }
+          }
+          break;
+        }
+
+        case 'store_memory': {
+          const { key, value } = action.params;
+          if (key && value) {
+            this.database.set(key, value, guildId);
+          }
+          break;
+        }
+
+        case 'trace_cost': {
+          // ... handled by AI Manager internally or here if needed
+          break;
+        }
+
+        default:
+          this.logger.warn(`Unknown action type: ${action.type}`);
+      }
+    } catch (error) {
+      this.logger.error(`Failed to execute action ${action.type}`, error);
+      throw error; // Rethrow to let QueueManager handle retry
+    }
+  }
+
   private async handleAIResponse(message: UniversalMessage) {
     if (!this.aiManager) return;
 
     try {
       const adapter = this.adapters.get(message.platform);
-      const response = await this.aiManager.generateEngagementResponse(
-        'You are in a community chat.',
+
+      // Add user message to short-term memory
+      this.memory.addMessage({
+        role: 'user',
+        content: message.content,
+        author: message.author.username,
+        timestamp: Date.now(),
+        channelId: message.channelId,
+        platform: message.platform,
+        guildId: message.guildId,
+      });
+
+      // Build context
+      const contextString = await this.memory.buildContext(
+        message.channelId,
+        message.content,
+        {
+          platform: message.platform,
+          guildId: message.guildId,
+          channelId: message.channelId,
+          userId: message.author.id,
+        }
+      );
+
+      const result = await this.aiManager.generateAutonomousResponse(
+        contextString,
         message.content
       );
 
-      await adapter?.sendMessage(message.channelId, response);
+      // 1. Send the verbal response (Immediate or Queued? Immediate usually feels better for chat)
+      // We'll keep chat response immediate for responsiveness, but actions queued.
+      if (result.response) {
+        await adapter?.sendMessage(message.channelId, result.response);
+
+        // Add bot's response to short-term memory
+        this.memory.addMessage({
+          role: 'assistant',
+          content: result.response,
+          author: 'Sox',
+          timestamp: Date.now(),
+          channelId: message.channelId,
+          platform: message.platform,
+          guildId: message.guildId // Fix: Add guildId
+        });
+      }
+
+      // 2. Queue actions if any
+      if (result.actions && result.actions.length > 0) {
+        for (const action of result.actions) {
+          await this.queueManager.addAction({
+            type: action.type,
+            platform: message.platform,
+            guildId: message.guildId,
+            channelId: message.channelId,
+            params: {
+              ...action.params,
+              channelId: message.channelId, // Inject context
+              guildId: message.guildId
+            }
+          });
+        }
+      }
+
     } catch (error) {
       this.logger.error('Error generating AI response', error);
+      const adapter = this.adapters.get(message.platform);
+      await adapter?.sendMessage(message.channelId, "My brain glitched for a second there.");
     }
   }
 
@@ -357,7 +562,7 @@ export class BotCore extends EventEmitter {
   }
 
   async shutdown() {
-    this.logger.info('Shutting down AutoGuild...');
+    this.logger.info('Shutting down Guildly...');
 
     // Shutdown plugins
     for (const plugin of this.plugins) {
@@ -375,6 +580,6 @@ export class BotCore extends EventEmitter {
     // Close database
     this.database.close();
 
-    this.logger.info('AutoGuild shut down successfully');
+    this.logger.info('Guildly shut down successfully');
   }
 }

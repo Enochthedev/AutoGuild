@@ -20,11 +20,13 @@ const ConfigSchema = z.object({
   WHATSAPP_ENABLED: z.enum(['true', 'false']).default('false'),
 
   // AI Provider configuration
-  AI_PROVIDER: z.enum(['openai', 'anthropic']).optional(),
+  AI_PROVIDER: z.enum(['openai', 'anthropic', 'openrouter']).optional(),
   OPENAI_API_KEY: z.string().optional(),
   OPENAI_MODEL: z.string().default('gpt-4-turbo-preview'),
   ANTHROPIC_API_KEY: z.string().optional(),
   ANTHROPIC_MODEL: z.string().default('claude-3-5-sonnet-20241022'),
+  OPENROUTER_API_KEY: z.string().optional(),
+  OPENROUTER_MODEL: z.string().default('openai/gpt-3.5-turbo'),
 
   // Database
   DATABASE_PATH: z.string().default('./data/autoguild.db'),
@@ -38,6 +40,7 @@ const ConfigSchema = z.object({
   ENABLE_ANALYTICS: z.enum(['true', 'false']).default('true'),
   ENABLE_ENGAGEMENT_TRACKING: z.enum(['true', 'false']).default('true'),
   ENABLE_AUTO_RESPONSES: z.enum(['true', 'false']).default('true'),
+  METRICS_ENABLED: z.enum(['true', 'false']).default('true'),
 
   // Rate limiting
   RATE_LIMIT_ENABLED: z.enum(['true', 'false']).default('true'),
@@ -132,6 +135,9 @@ export class ConfigValidator {
       if (this.config.AI_PROVIDER === 'anthropic' && !this.config.ANTHROPIC_API_KEY) {
         errors.push('AI_PROVIDER is set to "anthropic" but ANTHROPIC_API_KEY is not configured.');
       }
+      if (this.config.AI_PROVIDER === 'openrouter' && !this.config.OPENROUTER_API_KEY) {
+        errors.push('AI_PROVIDER is set to "openrouter" but OPENROUTER_API_KEY is not configured.');
+      }
     } else if (
       this.config.ENABLE_MODERATION === 'true' ||
       this.config.ENABLE_AUTO_RESPONSES === 'true'
@@ -178,7 +184,7 @@ export class ConfigValidator {
   public printConfigSummary(): void {
     const validation = this.validatePlatformConfig();
 
-    this.logger.info('=== AutoGuild Configuration Summary ===');
+    this.logger.info('=== Guildly Configuration Summary ===');
     this.logger.info(`Environment: ${this.config.NODE_ENV}`);
     this.logger.info(`Log Level: ${this.config.LOG_LEVEL}`);
     this.logger.info(`Command Prefix: ${this.config.COMMAND_PREFIX}`);

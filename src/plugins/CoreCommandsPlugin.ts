@@ -22,7 +22,7 @@ export class CoreCommandsPlugin implements Plugin {
 
         if (commandName) {
           // Show help for specific command
-          const commands = Array.from((this.context.bot as any).commands.values());
+          const commands = Array.from((this.context.bot as any).commands.values()) as any[];
           const command = commands.find((cmd: any) => cmd.name === commandName);
 
           if (!command) {
@@ -40,7 +40,7 @@ ${command.aliases ? `**Aliases:** ${command.aliases.join(', ')}` : ''}`;
           await adapter?.sendMessage(ctx.channel.id, response);
         } else {
           // Show all commands
-          const commands = Array.from((this.context.bot as any).commands.values());
+          const commands = Array.from((this.context.bot as any).commands.values()) as any[];
           let response = '📚 **Available Commands**\n\n';
 
           for (const command of commands) {
@@ -67,9 +67,9 @@ ${command.aliases ? `**Aliases:** ${command.aliases.join(', ')}` : ''}`;
     },
     {
       name: 'about',
-      description: 'Information about AutoGuild',
+      description: 'Information about Guildly and Sox',
       execute: async (ctx: CommandContext) => {
-        const response = `🤖 **AutoGuild** v1.0.0
+        const response = `🤖 **Guildly** v1.0.0 | Powered by **Sox**
 
 A universal AI-powered community management bot that works across multiple platforms.
 
